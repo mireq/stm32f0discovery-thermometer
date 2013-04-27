@@ -40,19 +40,6 @@ public:
 		displayWrite(CommandType, 0x06);
 		displayWrite(CommandType, 0x01);
 		delay_us(1640);
-
-
-		displayWrite(CharactersType, 'H');
-		displayWrite(CharactersType, 'e');
-		displayWrite(CharactersType, 'l');
-		displayWrite(CharactersType, 'l');
-		displayWrite(CharactersType, 'o');
-		displayWrite(CharactersType, ' ');
-		displayWrite(CharactersType, 'W');
-		displayWrite(CharactersType, 'o');
-		displayWrite(CharactersType, 'r');
-		displayWrite(CharactersType, 'l');
-		displayWrite(CharactersType, 'd');
 	}
 
 	void displayWrite(Type type, unsigned char data)
@@ -74,13 +61,37 @@ public:
 		GPIO_ResetBits(LCD_GPIO, LCD_EN);
 		delay_us(40);
 		GPIO_SetBits(LCD_GPIO, LCD_EN);
+	}
 
+	void writeString(const char *string)
+	{
+		while (*string != '\0') {
+			displayWrite(CharactersType, *string);
+			string++;
+		}
+	}
+
+	void writeNumber(uint32_t number)
+	{
+		static const uint32_t base[] = { 1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1 };
+		char numString[] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+		for (int pos = 0; pos < 10; ++pos) {
+			unsigned char digit = number / base[pos];
+			number -= digit * base[pos];
+			numString[pos] = '0' + digit;
+		}
+		writeString(numString);
+	}
+
+	void home()
+	{
+		displayWrite(CommandType, 0x02);
+		delay_us(1640);
 	}
 
 private:
 	inline void dataPartWrite(unsigned char dataPart)
 	{
-		//LCD_GPIO->ODR = (LCD_GPIO->ODR & ~(0x0f)) | (((dataPart >> 3) & 0x01) << 0) | (((dataPart >> 2) & 0x01) << 1) | (((dataPart >> 1) & 0x01) << 2) | (((dataPart >> 0) & 0x01) << 3);
 		LCD_GPIO->ODR = (LCD_GPIO->ODR & ~(LCD_DB0 | LCD_DB1 | LCD_DB2 | LCD_DB3)) |
 			(dataPart & 0x08 ? LCD_DB3 : 0) |
 			(dataPart & 0x04 ? LCD_DB2 : 0) |
@@ -128,7 +139,11 @@ void mainprog(void)
 	LCDDisplay display;
 	display.initialize();
 
+	uint32_t i = 0;
 	while (1) {
+		display.home();
+		display.writeNumber(i);
+		i++;
 		delay_us(40000);
 		GPIOC->ODR ^= (1 << 9);
 	}
