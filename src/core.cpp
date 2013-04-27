@@ -1,3 +1,7 @@
+#define US_TICKS 48
+#define UCC 2940
+#define U_ANALOG_MAX 45000.0f
+
 extern "C" {
 #include "stm32f0xx_conf.h"
 void delay_us(uint32_t us);
@@ -110,7 +114,6 @@ void SysTick_Handler(void)
 	SysTick->VAL = 0X00;
 }
 
-#define US_TICKS 48
 void delay_us(uint32_t us)
 {
 	SysTick->LOAD  = ((US_TICKS * us) & SysTick_LOAD_RELOAD_Msk) - 1;
@@ -124,6 +127,7 @@ void delay_us(uint32_t us)
 void mainprog(void)
 {
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOC, ENABLE);
 
 	GPIO_InitTypeDef GPIO_InitStructure;
@@ -136,14 +140,44 @@ void mainprog(void)
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_5 | GPIO_Pin_6;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);
 
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+	GPIO_Write(GPIOB, GPIO_Pin_9);
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AN;
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+
+	uint32_t i = 0;
+
+	// ADC
+	ADC_InitTypeDef ADC_InitStructure;
+	RCC_ADCCLKConfig(RCC_ADCCLK_PCLK_Div4);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+	ADC_DeInit(ADC1);
+	ADC_InitStructure.ADC_Resolution = ADC_Resolution_12b;
+	ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;
+	ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
+	ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+	ADC_InitStructure.ADC_ScanDirection = ADC_ScanDirection_Backward;
+	ADC_Init(ADC1, &ADC_InitStructure);
+	ADC_Cmd(ADC1, ENABLE);
+
+	ADC_ChannelConfig(ADC1, ADC_Channel_8, ADC_SampleTime_1_5Cycles);
+	ADC_StartOfConversion(ADC1);
+
 	LCDDisplay display;
 	display.initialize();
 
-	uint32_t i = 0;
 	while (1) {
 		display.home();
-		display.writeNumber(i);
-		i++;
+		i = ADC_GetConversionValue(ADC1);
+		float x = float(i) / U_ANALOG_MAX;
+		// zdroj: http://www.mosaic-industries.com/embedded-systems/microcontroller-projects/temperature-measurement/ntc-thermistors/example-code-equations
+		float t = 25.0f + (x*(-99.296f + x*(24.624f + x*147.26f))) / (1.0f + x*(0.0195f + x*2.8454f));
+		display.writeNumber(int(t * 10));
 		delay_us(40000);
 		GPIOC->ODR ^= (1 << 9);
 	}
